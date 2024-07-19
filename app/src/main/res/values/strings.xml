@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">SpeedDetector</string>
+    <string name="speed_0_0_m_s">Speed: 0.0 m/s</string>
+</resources>
