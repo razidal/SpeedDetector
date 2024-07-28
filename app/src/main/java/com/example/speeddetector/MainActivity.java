@@ -5,28 +5,29 @@ import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.Bundle;
+import androidx.appcompat.app.AppCompatActivity;
 import android.util.Log;
 import android.widget.TextView;
-import androidx.appcompat.app.AppCompatActivity;
-
-
 
 public class MainActivity extends AppCompatActivity implements SensorEventListener {
 
     private SensorManager sensorManager;
     private Sensor accelerometer;
-    private TextView msTextView;
-    private TextView knotTextView;
-    private static final int ALPHA = (int) 0.1; // Low-pass filter constant
-    private int lastAcceleration = 0; // Last acceleration value
-    private long lastUpdate = 0; // Last update timestamp
+    private TextView speedTextView;
+
+    private float[] gravity = new float[3];
+    private float[] linear_acceleration = new float[3];
+    private float velocity = 0;
+    private long lastUpdate = 0;
+
+    private KalmanFilter kalmanFilter;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        msTextView = findViewById(R.id.speedTextView);
+        speedTextView = findViewById(R.id.speedTextView);
 
         sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
         if (sensorManager == null) {
@@ -39,13 +40,15 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             Log.e("MainActivity", "Accelerometer sensor not available");
             return;
         }
+
+        kalmanFilter = new KalmanFilter(0.0f);
     }
 
     @Override
     protected void onResume() {
         super.onResume();
         if (accelerometer != null) {
-            sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_UI);
+            sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_NORMAL);
         }
     }
 
@@ -63,18 +66,51 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             long currentTime = System.currentTimeMillis();
             long timeDifference = currentTime - lastUpdate;
 
+            if (lastUpdate == 0) {
+                lastUpdate = currentTime;
+                return;
+            }
+
             if (timeDifference > 100) {
                 lastUpdate = currentTime;
 
-                int x = (int) event.values[0];
-                int y = (int) event.values[1];
-                int z = (int) event.values[2];
+                final float alpha = 0.8f;
 
-                int acceleration = Math.abs(lowPass((int) Math.sqrt(x * x + y * y + z * z), lastAcceleration));
-                lastAcceleration = acceleration;
+                // Isolate the force of gravity with the low-pass filter
+                gravity[0] = alpha * gravity[0] + (1 - alpha) * event.values[0];
+                gravity[1] = alpha * gravity[1] + (1 - alpha) * event.values[1];
+                gravity[2] = alpha * gravity[2] + (1 - alpha) * event.values[2];
 
-                int speed = calculateSpeed(acceleration);
-                updateSpeed(speed);
+                // Remove the gravity contribution with the high-pass filter
+                linear_acceleration[0] = event.values[0] - gravity[0];
+                linear_acceleration[1] = event.values[1] - gravity[1];
+                linear_acceleration[2] = event.values[2] - gravity[2];
+
+                // Calculate the linear acceleration magnitude
+                float acceleration = (float) Math.sqrt(linear_acceleration[0] * linear_acceleration[0]
+                        + linear_acceleration[1] * linear_acceleration[1]
+                        + linear_acceleration[2] * linear_acceleration[2]);
+
+                // Apply a noise threshold
+                if (acceleration < 0.1) {
+                    acceleration = 0;
+                }
+
+                // Integrate acceleration to get velocity
+                velocity += acceleration * (timeDifference / 1000.0f); // Convert ms to seconds
+
+                // Apply damping to velocity to simulate friction
+                velocity *= 0.5;
+
+                // Reset velocity if no significant movement
+                if (acceleration == 0 && velocity < 0.1) {
+                    velocity = 0;
+                }
+
+                // Use Kalman filter to smooth the velocity
+                velocity = kalmanFilter.update(velocity);
+
+                updateSpeed(velocity);
             }
         }
     }
@@ -84,18 +120,29 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         // Not needed for accelerometer
     }
 
-    private int lowPass(int current, int last) {
-        return last + (ALPHA * (current - last));
+    private void updateSpeed(float speed) {
+        runOnUiThread(() -> speedTextView.setText("Speed: " + String.format("%.2f", speed) + " m/s"));
+    }
+}
+
+class KalmanFilter {
+    private float estimate;
+    private float errorCovariance;
+    private float processNoise;
+    private float measurementNoise;
+    private float kalmanGain;
+
+    public KalmanFilter(float initialEstimate) {
+        this.estimate = initialEstimate;
+        this.errorCovariance = 1.0f;
+        this.processNoise = 0.1f;
+        this.measurementNoise = 0.5f;
     }
 
-    private int calculateSpeed(int acceleration) {
-        // Adjust the conversion formula based on your application's requirements
-        int speed = (int) (acceleration * (int)(0.277)); // Convert from m/s^2 to km/h (example)
-        return speed;
-    }
-
-    private void updateSpeed(int speed) {
-        runOnUiThread(() -> msTextView.setText("Speed: " + speed + " m/s"));
-
+    public float update(float measurement) {
+        kalmanGain = errorCovariance / (errorCovariance + measurementNoise);
+        estimate = estimate + kalmanGain * (measurement - estimate);
+        errorCovariance = (1 - kalmanGain) * errorCovariance + processNoise;
+        return estimate;
     }
 }
