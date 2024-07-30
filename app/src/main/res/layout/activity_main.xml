@@ -1,17 +1,47 @@
 <?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/main_layout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context=".MainActivity">
+    android:orientation="vertical"
+    android:gravity="center"
+    android:padding="16dp">
 
     <TextView
         android:id="@+id/speedTextView"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Speed: 0.0 m/s"
+        android:text="Speed: 0 m/s"
         android:textSize="24sp"
-        android:layout_centerInParent="true"/>
-</RelativeLayout>
+        android:textColor="@color/black"
+        android:layout_marginBottom="16dp"/>
 
+    <Switch
+        android:id="@+id/themeSwitch"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Dark Mode"
+        android:layout_marginBottom="16dp"/>
 
+    <Button
+        android:id="@+id/buttonMs"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="m/s"
+        android:layout_marginBottom="16dp"/>
+
+    <Button
+        android:id="@+id/buttonKnots"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Knots"
+        android:layout_marginBottom="16dp"/>
+
+    <Button
+        android:id="@+id/buttonKmH"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Km/h"
+        android:layout_marginBottom="16dp"/>
+
+</LinearLayout>

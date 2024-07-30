@@ -1,19 +1,23 @@
 package com.example.speeddetector;
 
+import android.content.SharedPreferences;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.Bundle;
-import androidx.appcompat.app.AppCompatActivity;
-import android.util.Log;
+import android.view.View;
+import android.widget.Button;
+import android.widget.Switch;
 import android.widget.TextView;
+import androidx.appcompat.app.AppCompatActivity;
 
 public class MainActivity extends AppCompatActivity implements SensorEventListener {
 
     private SensorManager sensorManager;
     private Sensor accelerometer;
     private TextView speedTextView;
+    private Switch themeSwitch;
 
     private float[] gravity = new float[3];
     private float[] linear_acceleration = new float[3];
@@ -21,6 +25,9 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private long lastUpdate = 0;
 
     private KalmanFilter kalmanFilter;
+    private boolean displayInMs = true;
+    private boolean displayInKnots = false;
+    private boolean displayInKmH = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -28,20 +35,71 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         setContentView(R.layout.activity_main);
 
         speedTextView = findViewById(R.id.speedTextView);
+        themeSwitch = findViewById(R.id.themeSwitch);
+        Button buttonMs = findViewById(R.id.buttonMs);
+        Button buttonKnots = findViewById(R.id.buttonKnots);
+        Button buttonKmH = findViewById(R.id.buttonKmH);
+
+        SharedPreferences preferences = getSharedPreferences("theme_prefs", MODE_PRIVATE);
+        boolean isDarkMode = preferences.getBoolean("isDarkMode", false);
+
+        applyTheme(isDarkMode);
+
+        themeSwitch.setChecked(isDarkMode);
+
+        themeSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            SharedPreferences.Editor editor = preferences.edit();
+            editor.putBoolean("isDarkMode", isChecked);
+            editor.apply();
+            applyTheme(isChecked);
+        });
+
+        buttonMs.setOnClickListener(v -> {
+            displayInMs = true;
+            displayInKnots = false;
+            displayInKmH = false;
+            updateSpeed(velocity);
+        });
+
+        buttonKnots.setOnClickListener(v -> {
+            displayInMs = false;
+            displayInKnots = true;
+            displayInKmH = false;
+            updateSpeed(velocity);
+        });
+
+        buttonKmH.setOnClickListener(v -> {
+            displayInMs = false;
+            displayInKnots = false;
+            displayInKmH = true;
+            updateSpeed(velocity);
+        });
 
         sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
         if (sensorManager == null) {
-            Log.e("MainActivity", "SensorManager is null");
             return;
         }
 
         accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
         if (accelerometer == null) {
-            Log.e("MainActivity", "Accelerometer sensor not available");
             return;
         }
 
         kalmanFilter = new KalmanFilter(0.0f);
+    }
+
+    private void applyTheme(boolean isDarkMode) {
+        int textColor = isDarkMode ? getResources().getColor(R.color.white) : getResources().getColor(R.color.black);
+        int backgroundColor = isDarkMode ? getResources().getColor(R.color.black) : getResources().getColor(R.color.white);
+        if(isDarkMode){
+            themeSwitch.setText("Light Mode");
+        }else{
+            themeSwitch.setText("Dark Mode");
+        }
+        speedTextView.setTextColor(textColor);
+        themeSwitch.setTextColor(textColor);
+
+        findViewById(R.id.main_layout).setBackgroundColor(backgroundColor);
     }
 
     @Override
@@ -76,38 +134,30 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
                 final float alpha = 0.8f;
 
-                // Isolate the force of gravity with the low-pass filter
                 gravity[0] = alpha * gravity[0] + (1 - alpha) * event.values[0];
                 gravity[1] = alpha * gravity[1] + (1 - alpha) * event.values[1];
                 gravity[2] = alpha * gravity[2] + (1 - alpha) * event.values[2];
 
-                // Remove the gravity contribution with the high-pass filter
                 linear_acceleration[0] = event.values[0] - gravity[0];
                 linear_acceleration[1] = event.values[1] - gravity[1];
                 linear_acceleration[2] = event.values[2] - gravity[2];
 
-                // Calculate the linear acceleration magnitude
                 float acceleration = (float) Math.sqrt(linear_acceleration[0] * linear_acceleration[0]
                         + linear_acceleration[1] * linear_acceleration[1]
                         + linear_acceleration[2] * linear_acceleration[2]);
 
-                // Apply a noise threshold
                 if (acceleration < 0.1) {
                     acceleration = 0;
                 }
 
-                // Integrate acceleration to get velocity
-                velocity += acceleration * (timeDifference / 1000.0f); // Convert ms to seconds
+                velocity += acceleration * (timeDifference / 1000.0f);
 
-                // Apply damping to velocity to simulate friction
                 velocity *= 0.5;
 
-                // Reset velocity if no significant movement
                 if (acceleration == 0 && velocity < 0.1) {
                     velocity = 0;
                 }
 
-                // Use Kalman filter to smooth the velocity
                 velocity = kalmanFilter.update(velocity);
 
                 updateSpeed(velocity);
@@ -117,32 +167,38 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {
-        // Not needed for accelerometer
     }
 
     private void updateSpeed(float speed) {
-        runOnUiThread(() -> speedTextView.setText("Speed: " + String.format("%.2f", speed) + " m/s"));
-    }
-}
+        float displaySpeed = speed;
+        String unit = " m/s";
 
-class KalmanFilter {
-    private float estimate;
-    private float errorCovariance;
-    private float processNoise;
-    private float measurementNoise;
-    private float kalmanGain;
+        if (displayInKnots) {
+            displaySpeed = speed * 1.94384f;
+            unit = " knots";
+        } else if (displayInKmH) {
+            displaySpeed = speed * 3.6f;
+            unit = " km/h";
+        }
 
-    public KalmanFilter(float initialEstimate) {
-        this.estimate = initialEstimate;
-        this.errorCovariance = 1.0f;
-        this.processNoise = 0.1f;
-        this.measurementNoise = 0.5f;
+        speedTextView.setText(String.format("Speed: %.2f%s", displaySpeed, unit));
     }
 
-    public float update(float measurement) {
-        kalmanGain = errorCovariance / (errorCovariance + measurementNoise);
-        estimate = estimate + kalmanGain * (measurement - estimate);
-        errorCovariance = (1 - kalmanGain) * errorCovariance + processNoise;
-        return estimate;
+    private static class KalmanFilter {
+        private float estimate;
+        private final float processNoise = 0.1f;
+        private final float measurementNoise = 0.1f;
+        private float errorEstimate = 1.0f;
+
+        public KalmanFilter(float initialEstimate) {
+            estimate = initialEstimate;
+        }
+
+        public float update(float measurement) {
+            float kalmanGain = errorEstimate / (errorEstimate + measurementNoise);
+            estimate = estimate + kalmanGain * (measurement - estimate);
+            errorEstimate = (1 - kalmanGain) * errorEstimate + Math.abs(estimate) * processNoise;
+            return estimate;
+        }
     }
 }
