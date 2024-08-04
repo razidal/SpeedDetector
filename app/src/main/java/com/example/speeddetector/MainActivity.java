@@ -6,7 +6,6 @@ import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.Bundle;
-import android.view.View;
 import android.widget.Button;
 import android.widget.Switch;
 import android.widget.TextView;
@@ -18,6 +17,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private Sensor accelerometer;
     private TextView speedTextView;
     private Switch themeSwitch;
+    private Button buttonMs, buttonKnots, buttonKmH;
 
     private float[] gravity = new float[3];
     private float[] linear_acceleration = new float[3];
@@ -25,9 +25,9 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private long lastUpdate = 0;
 
     private KalmanFilter kalmanFilter;
-    private boolean displayInMs = true;
-    private boolean displayInKnots = false;
-    private boolean displayInKmH = false;
+    private boolean displayInMs;
+    private boolean displayInKnots;
+    private boolean displayInKmH;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -36,12 +36,13 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
         speedTextView = findViewById(R.id.speedTextView);
         themeSwitch = findViewById(R.id.themeSwitch);
-        Button buttonMs = findViewById(R.id.buttonMs);
-        Button buttonKnots = findViewById(R.id.buttonKnots);
-        Button buttonKmH = findViewById(R.id.buttonKmH);
+        buttonMs = findViewById(R.id.buttonMs);
+        buttonKnots = findViewById(R.id.buttonKnots);
+        buttonKmH = findViewById(R.id.buttonKmH);
 
-        SharedPreferences preferences = getSharedPreferences("theme_prefs", MODE_PRIVATE);
+        SharedPreferences preferences = getSharedPreferences("settings", MODE_PRIVATE);
         boolean isDarkMode = preferences.getBoolean("isDarkMode", false);
+        String unitPreference = preferences.getString("unit", "m/s");
 
         applyTheme(isDarkMode);
 
@@ -54,7 +55,26 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             applyTheme(isChecked);
         });
 
+        switch (unitPreference) {
+            case "knots":
+                displayInMs = false;
+                displayInKnots = true;
+                displayInKmH = false;
+                break;
+            case "km/h":
+                displayInMs = false;
+                displayInKnots = false;
+                displayInKmH = true;
+                break;
+            default:
+                displayInMs = true;
+                displayInKnots = false;
+                displayInKmH = false;
+                break;
+        }
+
         buttonMs.setOnClickListener(v -> {
+            setUnitPreference("m/s");
             displayInMs = true;
             displayInKnots = false;
             displayInKmH = false;
@@ -62,6 +82,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         });
 
         buttonKnots.setOnClickListener(v -> {
+            setUnitPreference("knots");
             displayInMs = false;
             displayInKnots = true;
             displayInKmH = false;
@@ -69,6 +90,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         });
 
         buttonKmH.setOnClickListener(v -> {
+            setUnitPreference("km/h");
             displayInMs = false;
             displayInKnots = false;
             displayInKmH = true;
@@ -91,15 +113,20 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private void applyTheme(boolean isDarkMode) {
         int textColor = isDarkMode ? getResources().getColor(R.color.white) : getResources().getColor(R.color.black);
         int backgroundColor = isDarkMode ? getResources().getColor(R.color.black) : getResources().getColor(R.color.white);
-        if(isDarkMode){
-            themeSwitch.setText("Light Mode");
-        }else{
-            themeSwitch.setText("Dark Mode");
-        }
+
         speedTextView.setTextColor(textColor);
         themeSwitch.setTextColor(textColor);
-
+        buttonMs.setTextColor(textColor);
+        buttonKnots.setTextColor(textColor);
+        buttonKmH.setTextColor(textColor);
         findViewById(R.id.main_layout).setBackgroundColor(backgroundColor);
+    }
+
+    private void setUnitPreference(String unit) {
+        SharedPreferences preferences = getSharedPreferences("settings", MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putString("unit", unit);
+        editor.apply();
     }
 
     @Override
@@ -165,6 +192,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         }
     }
 
+    //not for use in this app
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {
     }
