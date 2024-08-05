@@ -25,9 +25,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private long lastUpdate = 0;
 
     private KalmanFilter kalmanFilter;
-    private boolean displayInMs;
-    private boolean displayInKnots;
-    private boolean displayInKmH;
+    private SpeedUnitStrategy speedUnitStrategy;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -55,45 +53,23 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             applyTheme(isChecked);
         });
 
-        switch (unitPreference) {
-            case "knots":
-                displayInMs = false;
-                displayInKnots = true;
-                displayInKmH = false;
-                break;
-            case "km/h":
-                displayInMs = false;
-                displayInKnots = false;
-                displayInKmH = true;
-                break;
-            default:
-                displayInMs = true;
-                displayInKnots = false;
-                displayInKmH = false;
-                break;
-        }
+        speedUnitStrategy = SpeedUnitFactory.getSpeedUnitStrategy(unitPreference);
 
         buttonMs.setOnClickListener(v -> {
             setUnitPreference("m/s");
-            displayInMs = true;
-            displayInKnots = false;
-            displayInKmH = false;
+            speedUnitStrategy = SpeedUnitFactory.getSpeedUnitStrategy("m/s");
             updateSpeed(velocity);
         });
 
         buttonKnots.setOnClickListener(v -> {
             setUnitPreference("knots");
-            displayInMs = false;
-            displayInKnots = true;
-            displayInKmH = false;
+            speedUnitStrategy = SpeedUnitFactory.getSpeedUnitStrategy("knots");
             updateSpeed(velocity);
         });
 
         buttonKmH.setOnClickListener(v -> {
             setUnitPreference("km/h");
-            displayInMs = false;
-            displayInKnots = false;
-            displayInKmH = true;
+            speedUnitStrategy = SpeedUnitFactory.getSpeedUnitStrategy("km/h");
             updateSpeed(velocity);
         });
 
@@ -198,16 +174,8 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     }
 
     private void updateSpeed(float speed) {
-        float displaySpeed = speed;
-        String unit = " m/s";
-
-        if (displayInKnots) {
-            displaySpeed = speed * 1.94384f;
-            unit = " knots";
-        } else if (displayInKmH) {
-            displaySpeed = speed * 3.6f;
-            unit = " km/h";
-        }
+        float displaySpeed = speedUnitStrategy.convertSpeed(speed);
+        String unit = speedUnitStrategy.getUnit();
 
         speedTextView.setText(String.format("Speed: %.2f%s", displaySpeed, unit));
     }
